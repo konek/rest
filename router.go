@@ -3,6 +3,8 @@ package rest
 import (
 	"log"
 	"errors"
+	"reflect"
+	"strings"
 	"net/http"
 	"io/ioutil"
 	"encoding/json"
@@ -14,6 +16,7 @@ import (
 const (
 	formatJSON = iota
 	formatXML
+	formatFORM
 )
 
 // Router overload the httprouter.Router in order to add default behaviors
@@ -36,26 +39,62 @@ type Resp interface{
 // An error of type Error can be returned in order to overwrite the default error message.
 type Controller func(r *http.Request, p Params) (interface{}, error)
 
-// Parse is an helper function to parse the body according to its content-type. It supports json and xml
+func parseForm(form map[string][]string, v interface{}) error {
+	val := reflect.ValueOf(v)
+	t := val.Type()
+	if t.Kind() != reflect.Ptr || val.IsNil(){
+		return errors.New("Cannot parse form to non-pointer types")
+	}
+	val = val.Elem()
+	for k, v := range(form) {
+		if len(v) == 0 {
+			continue
+		}
+		field := val.FieldByNameFunc(func (s string) bool {
+			key := strings.ToLower(k)
+			str := strings.ToLower(s)
+			return key == str
+		})
+		if field.Kind() == reflect.String {
+			field.SetString(v[0])
+		}
+	}
+	return nil
+}
+
+
+// Parse is an helper function to parse the body according to its content-type. It supports json, xml and www-form-urlencoded
 func Parse(r *http.Request, v interface{}) error {
+	var err error
+
 	outputFormat, _ := getFormat(r, "Accept")
 	inputFormat, found := getFormat(r, "Content-Type")
 	if found == false {
 		if header, ok := r.Header["Content-Type"]; ok == true && len(header) != 0 {
-			return Error500{"unsupported Content-Type: " + header[0]}
+		// 	return Error500{"unsupported Content-Type: " + header[0]}
 		}
 		inputFormat = outputFormat
 	}
 
-	chunk, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		return Error500{"failed to read body"}
-	}
-
 	if inputFormat == formatJSON {
+		chunk, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			return Error500{"failed to read body"}
+		}
+
 		err = json.Unmarshal(chunk, v)
 	} else if inputFormat == formatXML {
+		chunk, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			return Error500{"failed to read body"}
+		}
+
 		err = xml.Unmarshal(chunk, v)
+	} else if inputFormat == formatFORM {
+		err = r.ParseForm()
+		if err == nil {
+			err = parseForm(r.PostForm, v)
+		}
 	} else {
 		return errors.New("unknown output format")
 	}
@@ -72,6 +111,8 @@ func getFormat(r *http.Request, field string) (format int, found bool) {
 				return formatJSON, true
 			} else if format == "application/xml" {
 				return formatXML, true
+			} else if format == "application/x-www-form-urlencoded" {
+				return formatFORM, true
 			}
 		}
 	}
@@ -114,7 +155,7 @@ func handler(fn Controller) httprouter.Handle {
 			}
 			err2 := output(w, 500, NewError500(), outputFormat)
 			if err2 != nil {
-					log.Println("error while writing error:", err2)
+				log.Println("error while writing error:", err2)
 			}
 			return
 		}
@@ -134,9 +175,19 @@ func (r *Router) GET(path string, ctrl Controller) {
 	r.Router.GET(path, handler(ctrl))
 }
 
+// RawGET is an overload to httprouter. Please refer to httprouter.GET for more details about the path
+func (r *Router) RawGET(path string, ctrl httprouter.Handle) {
+	r.Router.GET(path, ctrl)
+}
+
 // POST is an overload to httprouter. Please refer to httprouter.POST for more details about the path
 func (r *Router) POST(path string, ctrl Controller) {
 	r.Router.POST(path, handler(ctrl))
+}
+
+// RawPOST is an overload to httprouter. Please refer to httprouter.POST for more details about the path
+func (r *Router) RawPOST(path string, ctrl httprouter.Handle) {
+	r.Router.POST(path, ctrl)
 }
 
 // PUT is an overload to httprouter. Please refer to httprouter.PUT for more details about the path
@@ -144,9 +195,19 @@ func (r *Router) PUT(path string, ctrl Controller) {
 	r.Router.PUT(path, handler(ctrl))
 }
 
+// RawPUT is an overload to httprouter. Please refer to httprouter.PUT for more details about the path
+func (r *Router) RawPUT(path string, ctrl httprouter.Handle) {
+	r.Router.PUT(path, ctrl)
+}
+
 // DELETE is an overload to httprouter. Please refer to httprouter.DELETE for more details about the path
 func (r *Router) DELETE(path string, ctrl Controller) {
 	r.Router.DELETE(path, handler(ctrl))
+}
+
+// RawDELETE is an overload to httprouter. Please refer to httprouter.DELETE for more details about the path
+func (r *Router) RawDELETE(path string, ctrl httprouter.Handle) {
+	r.Router.DELETE(path, ctrl)
 }
 
 // New creates a new router.

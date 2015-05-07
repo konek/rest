@@ -1,14 +1,14 @@
 package rest
 
 import (
-	"log"
-	"errors"
-	"reflect"
-	"strings"
-	"net/http"
-	"io/ioutil"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"reflect"
+	"strings"
 
 	"github.com/julienschmidt/httprouter"
 )
@@ -19,7 +19,7 @@ const (
 	formatFORM
 )
 
-// Router overload the httprouter.Router in order to add default behaviors
+// Router ...
 type Router struct {
 	*httprouter.Router
 }
@@ -30,7 +30,7 @@ type Params struct {
 }
 
 // Resp is an interface allowing to return custom statusCode (200 will be used otherwise)
-type Resp interface{
+type Resp interface {
 	StatusCode() int
 }
 
@@ -42,15 +42,15 @@ type Controller func(r *http.Request, p Params) (interface{}, error)
 func parseForm(form map[string][]string, v interface{}) error {
 	val := reflect.ValueOf(v)
 	t := val.Type()
-	if t.Kind() != reflect.Ptr || val.IsNil(){
+	if t.Kind() != reflect.Ptr || val.IsNil() {
 		return errors.New("Cannot parse form to non-pointer types")
 	}
 	val = val.Elem()
-	for k, v := range(form) {
+	for k, v := range form {
 		if len(v) == 0 {
 			continue
 		}
-		field := val.FieldByNameFunc(func (s string) bool {
+		field := val.FieldByNameFunc(func(s string) bool {
 			key := strings.ToLower(k)
 			str := strings.ToLower(s)
 			return key == str
@@ -62,7 +62,6 @@ func parseForm(form map[string][]string, v interface{}) error {
 	return nil
 }
 
-
 // Parse is an helper function to parse the body according to its content-type. It supports json, xml and www-form-urlencoded
 func Parse(r *http.Request, v interface{}) error {
 	var err error
@@ -71,7 +70,7 @@ func Parse(r *http.Request, v interface{}) error {
 	inputFormat, found := getFormat(r, "Content-Type")
 	if found == false {
 		if header, ok := r.Header["Content-Type"]; ok == true && len(header) != 0 {
-		// 	return Error500{"unsupported Content-Type: " + header[0]}
+			// 	return Error500{"unsupported Content-Type: " + header[0]}
 		}
 		inputFormat = outputFormat
 	}
@@ -106,7 +105,7 @@ func Parse(r *http.Request, v interface{}) error {
 
 func getFormat(r *http.Request, field string) (format int, found bool) {
 	if header, ok := r.Header[field]; ok == true {
-		for _, format := range(header) {
+		for _, format := range header {
 			if format == "application/json" {
 				return formatJSON, true
 			} else if format == "application/xml" {
@@ -216,4 +215,3 @@ func New() *Router {
 	r.Router = httprouter.New()
 	return r
 }
-

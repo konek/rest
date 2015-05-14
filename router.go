@@ -145,6 +145,7 @@ func handler(fn Controller) httprouter.Handle {
 		outputFormat, _ := getFormat(r, "Accept")
 		resp, err := fn(r, Params{p})
 		if err != nil {
+			log.Printf("error: %s, %+v\n", err, err)
 			if err2, ok := err.(Error); ok == true {
 				err3 := output(w, err2.StatusCode(), err2, outputFormat)
 				if err3 != nil {

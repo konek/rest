@@ -34,6 +34,12 @@ type Resp interface {
 	StatusCode() int
 }
 
+// RespCType is an interface allowing to return custom content-type
+type RespCType interface {
+	ContentType() string
+	Data() []byte
+}
+
 // Controller is the function signature to be used with the GET/POST/... functions.
 // A response of type Resp can be returned in order to overwrite the default 200 response.
 // An error of type Error can be returned in order to overwrite the default error message.
@@ -118,6 +124,15 @@ func getFormat(r *http.Request, field string) (format int, found bool) {
 	return formatJSON, false
 }
 
+func outputContentType(w http.ResponseWriter, code int, data []byte, format string) error {
+	var err error
+
+	w.Header().Set("Content-Type", format)
+	w.WriteHeader(code)
+	_, err = w.Write(data)
+	return err
+}
+
 func output(w http.ResponseWriter, code int, data interface{}, format int) error {
 	var chunk []byte
 	var err error
@@ -145,7 +160,11 @@ func handler(fn Controller) httprouter.Handle {
 		outputFormat, _ := getFormat(r, "Accept")
 		resp, err := fn(r, Params{p})
 		if err != nil {
-			log.Printf("error: %s, %+v\n", err, err)
+			if err2, ok := err.(ErrorTransparent); ok == true {
+				log.Printf("error: %s, %+v\n", err2, err2.Parent())
+			} else {
+				log.Printf("error: %s\n", err)
+			}
 			if err2, ok := err.(Error); ok == true {
 				err3 := output(w, err2.StatusCode(), err2, outputFormat)
 				if err3 != nil {
@@ -163,7 +182,11 @@ func handler(fn Controller) httprouter.Handle {
 		if resp2, ok := resp.(Resp); ok == true {
 			statusCode = resp2.StatusCode()
 		}
-		err = output(w, statusCode, resp, outputFormat)
+		if resp3, ok := resp.(RespCType); ok == true {
+			err = outputContentType(w, statusCode, resp3.Data(), resp3.ContentType())
+		} else {
+			err = output(w, statusCode, resp, outputFormat)
+		}
 		if err != nil {
 			log.Println("error while writing data:", err)
 		}
@@ -178,6 +201,16 @@ func (r *Router) GET(path string, ctrl Controller) {
 // RawGET is an overload to httprouter. Please refer to httprouter.GET for more details about the path
 func (r *Router) RawGET(path string, ctrl httprouter.Handle) {
 	r.Router.GET(path, ctrl)
+}
+
+// HEAD is an overload to httprouter. Please refer to httprouter.HEAD for more details about the path
+func (r *Router) HEAD(path string, ctrl Controller) {
+	r.Router.HEAD(path, handler(ctrl))
+}
+
+// RawHEAD is an overload to httprouter. Please refer to httprouter.HEAD for more details about the path
+func (r *Router) RawHEAD(path string, ctrl httprouter.Handle) {
+	r.Router.HEAD(path, ctrl)
 }
 
 // POST is an overload to httprouter. Please refer to httprouter.POST for more details about the path

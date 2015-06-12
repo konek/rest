@@ -1,13 +1,17 @@
-
 package rest
 
-//Error is the interface that needs to be implemented in order to return meaningfull errors to the client.
-type Error interface{
+// Error is the interface that needs to be implemented in order to return meaningfull errors to the client.
+type Error interface {
 	StatusCode() int
 }
 
+// ErrorTransparent is the interface that needs to be implemented in order to get the underlying errors in the logs.
+type ErrorTransparent interface {
+	Parent() error
+}
+
 // Error500 is an easy way to return 500 errors
-type Error500 struct{
+type Error500 struct {
 	Message string
 }
 
@@ -26,4 +30,3 @@ func (e Error500) Error() string {
 func (e Error500) StatusCode() int {
 	return 500
 }
-

@@ -29,9 +29,50 @@ type Params struct {
 	httprouter.Params
 }
 
+type ICookieSetter interface {
+	GetCookies() map[string]string
+}
+
+type CookieSetter struct {
+	Cookies map[string]string `json:"-" xml:"-"`
+}
+
+func (cs *CookieSetter) SetCookie(name, value string) {
+	if cs.Cookies == nil {
+		cs.Cookies = make(map[string]string)
+	}
+	cs.Cookies[name] = value
+}
+
+func (cs CookieSetter) GetCookies() map[string]string {
+	return cs.Cookies
+}
+
+type Redirect struct {
+	CookieSetter `json:"-" xml:"-"`
+	location     string
+	code         int
+}
+
+func MakeRedirect(code int, location string) Redirect {
+	return Redirect{
+		location: location,
+		code:     code,
+	}
+}
+
+func (r Redirect) StatusCode() int {
+	return r.code
+}
+
+func (r Redirect) Location() string {
+	return r.location
+}
+
 // Resp is an interface allowing to return custom statusCode (200 will be used otherwise)
 type Resp interface {
 	StatusCode() int
+	Location() string // empty string for no redirection
 }
 
 // RespCType is an interface allowing to return custom content-type
@@ -179,8 +220,28 @@ func handler(fn Controller) httprouter.Handle {
 			return
 		}
 		statusCode := 200
+		location := ""
 		if resp2, ok := resp.(Resp); ok == true {
-			statusCode = resp2.StatusCode()
+			if resp2.StatusCode() != 0 {
+				statusCode = resp2.StatusCode()
+				location = resp2.Location()
+			}
+		}
+		if resp2, ok := resp.(ICookieSetter); ok == true {
+			cookies := resp2.GetCookies()
+			if cookies != nil {
+				for name := range cookies {
+					http.SetCookie(w, &http.Cookie{
+						Name:   name,
+						Value:  cookies[name],
+						Path:   "/",
+						MaxAge: 24 * 60 * 60, // 24 hours cookie, need better implementation
+					})
+				}
+			}
+		}
+		if location != "" {
+			w.Header().Add("Location", location)
 		}
 		if resp3, ok := resp.(RespCType); ok == true {
 			err = outputContentType(w, statusCode, resp3.Data(), resp3.ContentType())

@@ -44,6 +44,13 @@ func (cs *CookieSetter) SetCookie(name, value string) {
 	cs.Cookies[name] = value
 }
 
+func (cs *CookieSetter) UnsetCookie(name string) {
+	if cs.Cookies == nil {
+		cs.Cookies = make(map[string]string)
+	}
+	cs.Cookies[name] = ""
+}
+
 func (cs CookieSetter) GetCookies() map[string]string {
 	return cs.Cookies
 }
@@ -231,12 +238,21 @@ func handler(fn Controller) httprouter.Handle {
 			cookies := resp2.GetCookies()
 			if cookies != nil {
 				for name := range cookies {
-					http.SetCookie(w, &http.Cookie{
-						Name:   name,
-						Value:  cookies[name],
-						Path:   "/",
-						MaxAge: 24 * 60 * 60, // 24 hours cookie, need better implementation
-					})
+					if len(cookies[name]) == 0 {
+						http.SetCookie(w, &http.Cookie{
+							Name:   name,
+							Value:  "nil",
+							Path:   "/",
+							MaxAge: -1,
+						})
+					} else {
+						http.SetCookie(w, &http.Cookie{
+							Name:   name,
+							Value:  cookies[name],
+							Path:   "/",
+							MaxAge: 24 * 60 * 60, // 24 hours cookie, needs better implementation
+						})
+					}
 				}
 			}
 		}
